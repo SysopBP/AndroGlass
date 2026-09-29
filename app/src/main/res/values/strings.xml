@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AndroGlass</string>
+    <string name="module_description">Independent frosted status bar prototype. SystemUI only. Requires modern Xposed API 102.</string>
+</resources>
