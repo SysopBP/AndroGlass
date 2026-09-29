@@ -154,12 +154,53 @@ final class StatusBarSession implements View.OnAttachStateChangeListener, ViewTr
         }
     }
 
-    /** Uses the documented resource name rather than changing every TextView in SystemUI. */
+    /**
+     * Finds Samsung/AOSP status-bar clock variants without depending on one resource id.
+     * We still require a visible TextView with a clock-like SystemUI id/name before touching alpha.
+     */
     private TextView findClock(ViewGroup group) {
-        int id = host.getResources().getIdentifier("clock", "id", "com.android.systemui");
-        if (id == 0) return null;
-        View candidate = group.findViewById(id);
-        return candidate instanceof TextView ? (TextView) candidate : null;
+        String[] knownIds = {
+                "clock", "status_bar_clock", "statusbar_clock", "clock_view",
+                "left_clock", "center_clock", "right_clock"
+        };
+        for (String name : knownIds) {
+            int id = host.getResources().getIdentifier(name, "id", "com.android.systemui");
+            if (id == 0) continue;
+            View candidate = group.findViewById(id);
+            if (candidate instanceof TextView && candidate.isShown()) return (TextView) candidate;
+        }
+        return findClockRecursive(group, 0);
+    }
+
+    /** Bounded Samsung fallback: inspect only this status-bar subtree and only clock-named TextViews. */
+    private TextView findClockRecursive(View view, int depth) {
+        if (view == null || depth > 10) return null;
+        if (view instanceof TextView && view.isShown()) {
+            int id = view.getId();
+            if (id != View.NO_ID) {
+                try {
+                    String pkg = view.getResources().getResourcePackageName(id);
+                    String name = view.getResources().getResourceEntryName(id);
+                    String lower = name == null ? "" : name.toLowerCase(java.util.Locale.ROOT);
+                    if ("com.android.systemui".equals(pkg)
+                            && lower.contains("clock")
+                            && !lower.contains("keyguard")
+                            && !lower.contains("date")) {
+                        return (TextView) view;
+                    }
+                } catch (Throwable ignored) {
+                    // Dynamic/no-name ids are not safe mutation targets.
+                }
+            }
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) view;
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                TextView found = findClockRecursive(parent.getChildAt(i), depth + 1);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     /** Removes only our overlay and restores the original clock alpha without reparenting views. */
