@@ -1,0 +1,44 @@
+name: Build AndroGlass
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify trial lease
+        run: bash tests/run.sh
+      - name: Build standalone APK
+        run: bash gradlew --no-daemon assembleDebug lintDebug
+      - name: Verify module identity
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -p "$APK" META-INF/xposed/scope.list | grep -x 'com.android.systemui'
+          unzip -p "$APK" META-INF/xposed/java_init.list | grep -x 'app.androglass.xposed.AndroGlassModule'
+          sha256sum "$APK" > app/build/outputs/apk/debug/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AndroGlass-preview-APK
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/SHA256SUMS.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AndroGlass-lint
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
