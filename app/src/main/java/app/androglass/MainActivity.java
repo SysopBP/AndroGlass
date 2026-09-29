@@ -108,7 +108,7 @@ public final class MainActivity extends Activity {
             long remaining = result.getLong("remaining", 0);
             countdown.setText(remaining > 0 ? "Test ends in " + (remaining + 999) / 1_000 + " seconds" : "Test is off · stock clock active");
             start.setEnabled(connected && remaining == 0);
-            preview.update(DateFormat.getTimeFormat(this).format(new Date()), dp(22), Typeface.create("sans-serif-medium", 0), result.getInt("accent", ConfigProvider.SILVER));
+            preview.update(DateFormat.getTimeFormat(this).format(new Date()), dp(22), Typeface.create("sans-serif-medium", Typeface.NORMAL), result.getInt("accent", ConfigProvider.SILVER));
         } catch (Exception failure) {
             hookStatus.setText("Connection unavailable: " + failure.getClass().getSimpleName());
             start.setEnabled(false);
