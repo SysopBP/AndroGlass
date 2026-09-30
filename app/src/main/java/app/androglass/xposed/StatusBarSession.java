@@ -24,6 +24,11 @@ final class StatusBarSession implements View.OnAttachStateChangeListener, ViewTr
     private Handler worker;
     private GlassClockView glass;
     private TextView clock;
+    private View battery;
+    private GlassBatteryView glassBattery;
+    private float originalBatteryAlpha;
+    private boolean hidingBattery;
+    private boolean batteryLogged;
     private float originalAlpha;
     private boolean hiding;
     private boolean attached;
@@ -145,12 +150,96 @@ final class StatusBarSession implements View.OnAttachStateChangeListener, ViewTr
             glass.update(target.getText().toString(), target.getTextSize(), target.getTypeface(), accent);
             if (!hiding) { originalAlpha = target.getAlpha(); hiding = true; }
             target.setAlpha(0f);
-            report = "LIVE: frosted clock attached inside SystemUI. Stock gestures retained.";
+            installBatteryTest(group);
+            report = glassBattery == null
+                    ? "LIVE: clock attached; scanning Samsung battery target."
+                    : "LIVE: clock + verified AndroGlass battery test attached.";
         } catch (Throwable failure) {
             failed = true;
             restore();
             report = "Rendering stopped after an error; stock clock restored.";
             Log.e("AndroGlass", "ANDROGLASS_RENDER_STOPPED", failure);
+        }
+    }
+
+    /** Finds a bounded Samsung/AOSP battery view and overlays only after bounds verification. */
+    private void installBatteryTest(ViewGroup group) {
+        View target = findBattery(group, 0);
+        if (target == null || !target.isShown() || target.getWidth() <= 0 || target.getHeight() <= 0) {
+            if (!batteryLogged) {
+                Log.i("AndroGlass", "ANDROGLASS_BATTERY_NOT_FOUND host=" + host.getClass().getName());
+                batteryLogged = true;
+            }
+            restoreBattery();
+            return;
+        }
+        Rect rect = new Rect();
+        target.getDrawingRect(rect);
+        group.offsetDescendantRectToMyCoords(target, rect);
+        if (rect.left < 0 || rect.top < 0 || rect.right > group.getWidth() || rect.bottom > group.getHeight()
+                || rect.width() < 6 || rect.height() < 6 || rect.width() > group.getWidth() / 3) {
+            Log.w("AndroGlass", "ANDROGLASS_BATTERY_BOUNDS_REJECTED " + rect);
+            restoreBattery();
+            return;
+        }
+        if (battery != target) {
+            restoreBattery();
+            battery = target;
+            Log.i("AndroGlass", "ANDROGLASS_BATTERY_TARGET class=" + target.getClass().getName()
+                    + " id=" + safeResourceName(target) + " bounds=" + rect);
+        }
+        if (glassBattery == null) {
+            glassBattery = new GlassBatteryView(host.getContext());
+            group.getOverlay().add(glassBattery);
+        }
+        glassBattery.layout(rect.left, rect.top, rect.right, rect.bottom);
+        glassBattery.update(accent);
+        if (!hidingBattery) {
+            originalBatteryAlpha = target.getAlpha();
+            hidingBattery = true;
+        }
+        target.setAlpha(0f);
+    }
+
+    private View findBattery(View view, int depth) {
+        if (view == null || depth > 12) return null;
+        if (view.isShown() && view.getId() != View.NO_ID) {
+            String name = safeResourceName(view).toLowerCase(java.util.Locale.ROOT);
+            String clazz = view.getClass().getName().toLowerCase(java.util.Locale.ROOT);
+            boolean batteryNamed = name.contains("battery") || clazz.contains("battery");
+            boolean excluded = name.contains("keyguard") || name.contains("settings")
+                    || name.contains("shelf") || name.contains("qs_");
+            if (batteryNamed && !excluded && view.getWidth() > 0 && view.getHeight() > 0) return view;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) view;
+            for (int i = 0; i < parent.getChildCount(); i++) {
+                View found = findBattery(parent.getChildAt(i), depth + 1);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private String safeResourceName(View view) {
+        if (view == null || view.getId() == View.NO_ID) return "no-id";
+        try {
+            return view.getResources().getResourceName(view.getId());
+        } catch (Throwable ignored) {
+            return "id:" + view.getId();
+        }
+    }
+
+    private void restoreBattery() {
+        try {
+            if (hidingBattery && battery != null) battery.setAlpha(originalBatteryAlpha);
+            if (glassBattery != null && host instanceof ViewGroup) ((ViewGroup) host).getOverlay().remove(glassBattery);
+        } catch (Throwable failure) {
+            Log.e("AndroGlass", "ANDROGLASS_BATTERY_RESTORE_FAILED", failure);
+        } finally {
+            hidingBattery = false;
+            battery = null;
+            glassBattery = null;
         }
     }
 
@@ -205,6 +294,7 @@ final class StatusBarSession implements View.OnAttachStateChangeListener, ViewTr
 
     /** Removes only our overlay and restores the original clock alpha without reparenting views. */
     private void restore() {
+        restoreBattery();
         try {
             if (hiding && clock != null) clock.setAlpha(originalAlpha);
             if (glass != null && host instanceof ViewGroup) ((ViewGroup) host).getOverlay().remove(glass);
