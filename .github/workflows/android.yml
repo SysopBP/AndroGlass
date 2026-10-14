@@ -1,3 +1,4 @@
+# Modified by SysopBP, 2026-10-14: pin workflow dependencies to verified commits.
 name: Build AndroGlass
 on:
   push:
@@ -11,12 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: '8.11.1'
       - name: Verify Android SDK 35
@@ -36,14 +37,14 @@ jobs:
           unzip -p "$APK" META-INF/xposed/scope.list | grep -x 'com.android.systemui'
           unzip -p "$APK" META-INF/xposed/java_init.list | grep -x 'app.androglass.xposed.AndroGlassModule'
           sha256sum "$APK" > app/build/outputs/apk/debug/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: AndroGlass-preview-APK
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/debug/SHA256SUMS.txt
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: AndroGlass-lint
